@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Flappy Bird — Мини</title>
+<style>
+  :root{
+    --bg:#70c5ce;
+    --ground:#ded895;
+    --pipe:#2b8a3e;
+    --bird:#ffdd57;
+    --text:#0b2b3a;
+  }
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  .wrap{display:flex;align-items:center;justify-content:center;height:100%;background:linear-gradient(#9fe6f0, var(--bg));}
+  canvas{border-radius:12px;box-shadow:0 10px 30px rgba(11,43,58,0.15);background:transparent;display:block;}
+  .hint{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;color:rgba(11,43,58,0.7);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game"></canvas>
+</div>
+<div class="hint">Пробел / клик / тап — прыгнуть. Нажми после смерти чтобы перезапустить.</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  // Размер канваса (будет масштабироваться под устройство)
+  const WIDTH = 480;
+  const HEIGHT = 640;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2); // ограничим DPR для производительности
+
+  canvas.width = WIDTH * DPR;
+  canvas.height = HEIGHT * DPR;
+  canvas.style.width = WIDTH + 'px';
+  canvas.style.height = HEIGHT + 'px';
+  ctx.scale(DPR, DPR);
+
+  // Игровые параметры
+  const GROUND_HEIGHT = 80;
+  const PIPE_WIDTH = 72;
+  const PIPE_GAP = 150; // расстояние между верхним и нижним трубами
+  const PIPE_INTERVAL = 1400; // миллисекунд между появлением труб
+  const GRAVITY = 900; // px/s^2
+  const FLAP_VELOCITY = -300; // px/s
+  const MAX_DROP_SPEED = 600;
+  const BIRD_SIZE = 28;
+
+  // Состояние
+  let lastTime = 0;
+  let accumulator = 0;
+  let pipes = [];
+  let spawnTimer = 0;
+  let score = 0;
+  let best = parseInt(localStorage.getItem('flappy_best') || '0', 10);
+  let gameState = 'start'; // 'start' | 'playing' | 'dead'
+  let buttonsEnabled = true;
+
+  // Птица
+  const bird = {
+    x: WIDTH * 0.25,
+    y: HEIGHT * 0.5,
+    vy: 0,
+    angle: 0, // для поворота при падении/взлете
+    size: BIRD_SIZE,
+    flap() {
+      this.vy = FLAP_VELOCITY;
+      this.angle = -0.5;
+      playClick();
+    },
+    update(dt) {
+      this.vy += GRAVITY * dt;
+      if (this.vy > MAX_DROP_SPEED) this.vy = MAX_DROP_SPEED;
+      this.y += this.vy * dt;
+      // угол поворота плавно возвращается вниз
+      this.angle += (Math.min(1.0, (this.vy / MAX_DROP_SPEED)) * 1.0 - this.angle) * dt * 5;
+      // ограничение внутри экрана
+      if (this.y < 10) this.y = 10;
+    },
+    draw(ctx) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle);
+      // тело
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bird').trim() || '#ffdd57';
+      roundRect(ctx, -this.size/2, -this.size/2, this.size, this.size, 6);
+      ctx.fill();
+      // глаз
+      ctx.fillStyle = '#222';
+      ctx.beginPath();
+      ctx.arc(this.size*0.12, -this.size*0.08, this.size*0.08, 0, Math.PI*2);
+      ctx.fill();
+      // клюв
+      ctx.fillStyle = '#ff8a00';
+      ctx.beginPath();
+      ctx.moveTo(this.size/2, 0);
+      ctx.lineTo(this.size/2 + 10, -6);
+      ctx.lineTo(this.size/2 + 10, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+
+  function roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  // Трубы
+  function spawnPipe() {
+    const minTop = 60;
+    const maxTop = HEIGHT - GROUND_HEIGHT - PIPE_GAP - 60;
+    const topHeight = Math.floor(minTop + Math.random() * (Math.max(0, maxTop - minTop)));
+    const x = WIDTH + PIPE_WIDTH;
+    pipes.push({
+      x,
+      topHeight,
+      passed: false
+    });
+  }
+
+  // События ввода
+  function onFlap() {
+    if (!buttonsEnabled) return;
+    if (gameState === 'start') {
+      gameState = 'playing';
+      resetPlayTimers();
+      bird.flap();
+    } else if (gameState === 'playing') {
+      bird.flap();
+    } else if (gameState === 'dead') {
+      restart();
+    }
+  }
+
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      onFlap();
+    }
+  });
+  canvas.addEventListener('mousedown', onFlap);
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); onFlap(); }, {passive:false});
+
+  // Аудио (короткий щелчок)
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ audioCtx = null; }
+    }
+  }
+  function playClick(){
+    ensureAudio();
+    if(!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = 520;
+    g.gain.value = 0.08;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.06);
+  }
+  function playHit(){
+    ensureAudio();
+    if(!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'square';
+    o.frequency.value = 120;
+    g.gain.value = 0.15;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    o.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.3);
+    o.stop(audioCtx.currentTime + 0.35);
+  }
+
+  // Сброс таймеров при старте игры
+  function resetPlayTimers(){
+    pipes = [];
+    spawnTimer = 0;
+    score = 0;
+    bird.x = WIDTH * 0.25;
+    bird.y = HEIGHT * 0.5;
+    bird.vy = 0;
+    bird.angle = 0;
+  }
+
+  function restart(){
+    gameState = 'start';
+    resetPlayTimers();
+    buttonsEnabled = true;
+  }
+
+  // Коллизия
+  function checkCollision(pipe){
+    // bird bounding
+    const bx = bird.x;
+    const by = bird.y;
+    const r = bird.size * 0.45;
+    const left = pipe.x;
+    const right = pipe.x + PIPE_WIDTH;
+    const topBottomY = pipe.topHeight + PIPE_GAP;
+    // if bird overlaps pipe rects
+    // upper pipe rect: x..x+PIPE_WIDTH, y: 0..topHeight
+    // lower pipe rect: x..x+PIPE_WIDTH, y: topHeight+PIPE_GAP .. HEIGHT-ground
+    // check simple circle-rect collision
+    function circleRectCollide(cx,cy,cr,rx,ry,rw,rh){
+      const nearestX = Math.max(rx, Math.min(cx, rx+rw));
+      const nearestY = Math.max(ry, Math.min(cy, ry+rh));
+      const dx = cx - nearestX;
+      const dy = cy - nearestY;
+      return (dx*dx + dy*dy) <= cr*cr;
+    }
+    if (circleRectCollide(bx,by,r,left,0,PIPE_WIDTH,pipe.topHeight)) return true;
+    if (circleRectCollide(bx,by,r,left,topBottomY,PIPE_WIDTH,HEIGHT - GROUND_HEIGHT - topBottomY)) return true;
+    // ground collision
+    if (by + r >= HEIGHT - GROUND_HEIGHT) return true;
+    return false;
+  }
+
+  // Игровой цикл
+  function update(dt){
+    if (gameState === 'playing') {
+      bird.update(dt);
+
+      // spawn pipes
+      spawnTimer += dt * 1000;
+      if (spawnTimer >= PIPE_INTERVAL) {
+        spawnTimer -= PIPE_INTERVAL;
+        spawnPipe();
+      }
+
+      // move pipes
+      for (let i = pipes.length - 1; i >= 0; i--) {
+        pipes[i].x -= 140 * dt; // скорость движения труб
+        // scoring: passed bird
+        if (!pipes[i].passed && pipes[i].x + PIPE_WIDTH < bird.x - bird.size/2) {
+          pipes[i].passed = true;
+          score += 1;
+          playClick();
+        }
+        // remove off-screen
+        if (pipes[i].x + PIPE_WIDTH < -50) pipes.splice(i,1);
+      }
+
+      // collision check
+      for (let p of pipes) {
+        if (checkCollision(p)) {
+          // collision happened
+          playHit();
+          gameState = 'dead';
+          buttonsEnabled = false;
+          if (score > best) {
+            best = score;
+            localStorage.setItem('flappy_best', String(best));
+          }
+          // allow restart after short timeout to avoid instant restart on click
+          setTimeout(()=>buttonsEnabled=true, 300);
+        }
+      }
+      // if falls below ground
+      if (bird.y + bird.size/2 >= HEIGHT - GROUND_HEIGHT) {
+        // handled in collision check, but ensure state
+        // already handled
+      }
+    } else if (gameState === 'start') {
+      // bird gentle bob
+      bird.angle = Math.sin(Date.now()/350) * 0.12;
+    } else if (gameState === 'dead') {
+      // bird falls down if not on ground
+      if (bird.y + bird.size/2 < HEIGHT - GROUND_HEIGHT) {
+        bird.update(dt);
+      } else {
+        bird.vy = 0;
+      }
+    }
+  }
+
+  function drawBackground(){
+    // sky gradient already via body, but draw background elements
+    // sun/clouds simple
+    ctx.clearRect(0,0,WIDTH,HEIGHT);
+    // ground
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ground').trim() || '#ded895';
+    ctx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, GROUND_HEIGHT);
+    // ground pattern simple lines
+    ctx.fillStyle = 'rgba(0,0,0,0.03)';
+    for (let i=0;i<WIDTH;i+=10){
+      ctx.fillRect(i, HEIGHT - 10 - (i%30)/3, 6, 1);
+    }
+  }
+
+  function drawPipes(){
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--pipe').trim() || '#2b8a3e';
+    for (let p of pipes) {
+      // top pipe
+      ctx.fillRect(p.x, 0, PIPE_WIDTH, p.topHeight);
+      // cap for nicer look
+      ctx.fillRect(p.x-6, p.topHeight - 12, PIPE_WIDTH+12, 12);
+      // bottom pipe
+      const bottomY = p.topHeight + PIPE_GAP;
+      ctx.fillRect(p.x, bottomY, PIPE_WIDTH, HEIGHT - GROUND_HEIGHT - bottomY);
+      ctx.fillRect(p.x-6, bottomY, PIPE_WIDTH+12, 12);
+    }
+  }
+
+  function drawScore(){
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#0b2b3a';
+    ctx.font = 'bold 36px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    if (gameState === 'playing' || gameState === 'dead') {
+      ctx.fillText(String(score), WIDTH/2, 70);
+    } else if (gameState === 'start') {
+      ctx.fillText('FLAPPY', WIDTH/2, 120);
+      ctx.font = '14px system-ui, sans-serif';
+      ctx.fillText('Нажми пробел или тап, чтобы начать', WIDTH/2, 150);
+      ctx.font = '16px system-ui, sans-serif';
+      ctx.fillText('Лучший: ' + best, WIDTH/2, 190);
+    }
+
+    if (gameState === 'dead') {
+      ctx.font = '24px system-ui, sans-serif';
+      ctx.fillText('Игра окончена', WIDTH/2, HEIGHT/2 - 10);
+      ctx.font = '16px system-ui, sans-serif';
+      ctx.fillText('Нажми пробел или кликни чтобы начать заново', WIDTH/2, HEIGHT/2 + 18);
+      ctx.fillText('Счёт: ' + score + '  |  Лучший: ' + best, WIDTH/2, HEIGHT/2 + 46);
+    }
+  }
+
+  function draw(){
+    drawBackground();
+    drawPipes();
+    bird.draw(ctx);
+    drawScore();
+  }
+
+  function loop(ts){
+    if (!lastTime) lastTime = ts;
+    let dt = (ts - lastTime) / 1000;
+    // clamp dt to avoid huge jumps if tab was inactive
+    if (dt > 0.05) dt = 0.05;
+    lastTime = ts;
+
+    update(dt);
+    draw();
+
+    requestAnimationFrame(loop);
+  }
+
+  // Начинаем
+  restart();
+  requestAnimationFrame(loop);
+
+  // responsive: при изменении размера окна масштабировать canvas CSS (оно уже фиксировано), можно добавить костыль
+  window.addEventListener('resize', ()=> {
+    // не меняем внутреннее разрешение — канвас фиксирован для простоты
+  });
+
+})();
+</script>
+</body>
+</html>

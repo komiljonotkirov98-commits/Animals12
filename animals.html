@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Игра про животных в джунглях</title>
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: url('https://i.imgur.com/7KQjO7F.jpg') no-repeat center center fixed;
+    background-size: cover;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100vh;
+    overflow: hidden;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+  }
+
+  h1 {
+    margin: 20px;
+    font-size: 36px;
+  }
+
+  #gameArea {
+    position: relative;
+    width: 800px;
+    height: 500px;
+    background: rgba(34,139,34,0.5); /* полупрозрачная трава */
+    border: 3px solid #2e8b57;
+    border-radius: 15px;
+    overflow: hidden;
+  }
+
+  .animal {
+    position: absolute;
+    font-size: 48px;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+
+  .animal:hover {
+    transform: scale(1.4) rotate(10deg);
+  }
+
+  #score {
+    margin-top: 15px;
+    font-size: 28px;
+  }
+</style>
+</head>
+<body>
+<h1>Поймай животных в джунглях!</h1>
+<div id="gameArea"></div>
+<div id="score">Счет: 0</div>
+
+<script>
+const gameArea = document.getElementById('gameArea');
+const scoreDisplay = document.getElementById('score');
+let score = 0;
+
+// Список животных
+const animals = ['🐶', '🐱', '🐭', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁'];
+
+// Функция появления животных
+function createAnimal() {
+  const animal = document.createElement('div');
+  animal.classList.add('animal');
+  animal.textContent = animals[Math.floor(Math.random() * animals.length)];
+
+  // Случайная позиция
+  const x = Math.random() * (gameArea.clientWidth - 60);
+  const y = Math.random() * (gameArea.clientHeight - 60);
+  animal.style.left = x + 'px';
+  animal.style.top = y + 'px';
+
+  // При клике на животное
+  animal.addEventListener('click', () => {
+    score++;
+    scoreDisplay.textContent = 'Счет: ' + score;
+    animal.remove();
+  });
+
+  gameArea.appendChild(animal);
+
+  // Животное исчезает через 2 секунды
+  setTimeout(() => {
+    if (animal.parentElement) {
+      animal.remove();
+    }
+  }, 2000);
+}
+
+// Появление животных каждые 1,5 секунды
+setInterval(createAnimal, 1500);
+
+// Добавим немного анимации листьев (атмосфера джунглей)
+function createLeaf() {
+  const leaf = document.createElement('div');
+  leaf.textContent = '🍃';
+  leaf.style.position = 'absolute';
+  leaf.style.left = Math.random() * window.innerWidth + 'px';
+  leaf.style.top = '-50px';
+  leaf.style.fontSize = (20 + Math.random() * 30) + 'px';
+  leaf.style.opacity = Math.random();
+  leaf.style.transition = 'top 5s linear, left 5s linear';
+
+  document.body.appendChild(leaf);
+
+  setTimeout(() => {
+    leaf.style.top = window.innerHeight + 'px';
+    leaf.style.left = parseFloat(leaf.style.left) + (Math.random() * 100 - 50) + 'px';
+  }, 100);
+
+  setTimeout(() => leaf.remove(), 5000);
+}
+
+// Листья падают каждые 0,5 секунды
+setInterval(createLeaf, 500);
+</script>
+</body>
+</html>

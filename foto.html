@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Фотограф в джунглях (Hardcore)</title>
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #0a2d0a; /* джунгли */
+    overflow: hidden;
+    color: white;
+  }
+
+  #exitBtn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    background-color: #f44336;
+    color: white;
+    z-index: 1000;
+  }
+
+  #score {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 24px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px #000;
+  }
+
+  #gameArea {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .animal {
+    position: absolute;
+    font-size: 48px;
+    cursor: pointer;
+    transition: transform 0.1s;
+    z-index: 2;
+  }
+
+  .animal:hover {
+    transform: scale(1.3) rotate(10deg);
+  }
+
+  .tree {
+    position: absolute;
+    bottom: 0;
+    width: 80px;
+    height: 150px;
+    background: url('https://i.imgur.com/KXo4iIa.png') no-repeat center bottom;
+    background-size: contain;
+    z-index: 1;
+  }
+
+  #cameraEffect {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: black;
+    border: 5px solid white;
+    display: none;
+    z-index: 999;
+  }
+</style>
+</head>
+<body>
+
+<button id="exitBtn" onclick="location.href='index.html'">Выйти</button>
+<div id="score">Счет: 0</div>
+<div id="gameArea"></div>
+<div id="cameraEffect"></div>
+
+<script>
+const gameArea = document.getElementById('gameArea');
+const scoreDisplay = document.getElementById('score');
+const cameraEffect = document.getElementById('cameraEffect');
+let score = 0;
+let gameOver = false;
+
+// Добавляем деревья на фоне
+function createTrees(count=7){
+  for(let i=0; i<count; i++){
+    const tree = document.createElement('div');
+    tree.classList.add('tree');
+    tree.style.left = Math.random()*(window.innerWidth-80) + 'px';
+    tree.style.height = 100 + Math.random()*100 + 'px';
+    tree.style.width = parseFloat(tree.style.height)*0.5 + 'px';
+    gameArea.appendChild(tree);
+  }
+}
+createTrees();
+
+// Животные
+const animals = [
+  {icon: '🐶', points: 1, baseSpeed: 3},
+  {icon: '🐱', points: 1, baseSpeed: 3},
+  {icon: '🐼', points: 2, baseSpeed: 4},
+  {icon: '🦁', points: 3, baseSpeed: 5},
+  {icon: '🐯', points: 3, baseSpeed: 5},
+  {icon: '🦊', points: 2, baseSpeed: 4}
+];
+
+function createAnimal() {
+  if(gameOver) return; // не создавать новые животные после проигрыша
+  const animalData = animals[Math.floor(Math.random()*animals.length)];
+  const animal = document.createElement('div');
+  animal.classList.add('animal');
+  animal.textContent = animalData.icon;
+
+  animal.style.left = '-60px';
+  animal.style.top = Math.random()*(window.innerHeight-60) + 'px';
+  gameArea.appendChild(animal);
+
+  let pos = -60;
+  const speed = animalData.baseSpeed + Math.random()*2; 
+  const move = setInterval(() => {
+    pos += speed;
+    animal.style.left = pos + 'px';
+    if(pos > window.innerWidth) {
+      clearInterval(move);
+      if(!gameOver){
+        gameOver = true;
+        alert('Вы проиграли! Ваш счет: ' + score);
+        location.reload(); // перезагрузка игры
+      }
+    }
+  }, 16);
+
+  animal.addEventListener('click', () => {
+    if(gameOver) return;
+    score += animalData.points;
+    scoreDisplay.textContent = 'Счет: ' + score;
+    animal.remove();
+    clearInterval(move);
+
+    // Эффект камеры на 0.5 секунды
+    cameraEffect.style.display = 'block';
+    setTimeout(() => cameraEffect.style.display = 'none', 500);
+  });
+}
+
+// Животные появляются каждые 1,2 секунды
+setInterval(createAnimal, 1200);
+</script>
+
+</body>
+</html>

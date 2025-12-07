@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<title>Hayvonlar E’loni</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f9f9f9;
+        margin: 0;
+        padding: 0;
+    }
+    header {
+        background: #4CAF50;
+        padding: 20px;
+        color: white;
+        text-align: center;
+        font-size: 28px;
+        font-weight: bold;
+    }
+    nav {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        background: #45A049;
+        padding: 10px;
+    }
+    nav a {
+        color: white;
+        text-decoration: none;
+        font-size: 18px;
+    }
+    nav a:hover {
+        text-decoration: underline;
+    }
+    .container {
+        width: 90%;
+        max-width: 900px;
+        margin: auto;
+        margin-top: 20px;
+    }
+    .form-box {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    input, select, textarea {
+        width: 100%;
+        padding: 12px;
+        margin-top: 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+    }
+    button {
+        width: 100%;
+        padding: 12px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        font-size: 18px;
+        border-radius: 6px;
+        margin-top: 10px;
+        cursor: pointer;
+    }
+    button:hover {
+        background: #45A049;
+    }
+    .card {
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        margin-bottom: 20px;
+    }
+    .card img {
+        width: 100%;
+        border-radius: 10px;
+        margin-bottom: 10px;
+    }
+    .no-elon {
+        text-align: center;
+        font-size: 20px;
+        margin-top: 20px;
+        color: #777;
+    }
+</style>
+</head>
+<body>
+
+<header>Hayvonlar E’loni</header>
+
+<nav>
+    <a href="#" onclick="showPage('list')">Barcha e’lonlar</a>
+    <a href="#" onclick="showPage('add')">Yangi e’lon qo‘shish</a>
+    <a href="menu.html" onclick="showPage('add')">Hayvon haqida o'yin</a>
+</nav>
+
+<div class="container">
+
+    <div id="add" class="page">
+        <div class="form-box">
+            <h2>Yangi e’lon qo‘shish</h2>
+
+            <select id="type">
+                <option value="Mushuk">🐱 Mushuk</option>
+                <option value="Kuchuk">🐶 Kuchuk</option>
+                <option value="Quyon">🐰 Quyon</option>
+                <option value="Parranda">🐦 Parranda</option>
+                <option value="Boshqa">🦔 Boshqa hayvon</option>
+            </select>
+
+            <input type="text" id="name" placeholder="Hayvon nomi (masalan: Persian mushuk)">
+            <input type="text" id="price" placeholder="Narxi (masalan: 300 000 so‘m)">
+            <input type="file" id="imgFile" accept="image/*">
+            <textarea id="desc" placeholder="Qo‘shimcha ma’lumot" rows="4"></textarea>
+
+            <button onclick="addElon()">E’lon qo‘shish</button>
+        </div>
+    </div>
+
+    <div id="list" class="page">
+        <h2>E’lonlar ro‘yxati</h2>
+        <div id="elonlar"></div>
+        <div id="noElon" class="no-elon">Hozircha e’lonlar yo‘q</div>
+    </div>
+
+</div>
+
+<script>
+let elonlar = [];
+
+// LocalStorage'dan yuklash
+if (localStorage.getItem('elonlar')) {
+    elonlar = JSON.parse(localStorage.getItem('elonlar'));
+}
+
+function showPage(page) {
+    document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+    document.getElementById(page).style.display = 'block';
+    if(page === 'list') renderElonlar();
+}
+
+function addElon() {
+    let type = document.getElementById("type").value;
+    let name = document.getElementById("name").value;
+    let price = document.getElementById("price").value;
+    let desc = document.getElementById("desc").value;
+    let imgFile = document.getElementById("imgFile").files[0];
+
+    if (!name || !price || !imgFile) {
+        alert("Iltimos barcha maydonlarni to‘ldiring!");
+        return;
+    }
+
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        let imgData = e.target.result;
+        let elon = {type, name, price, desc, img: imgData};
+        elonlar.unshift(elon);
+        localStorage.setItem('elonlar', JSON.stringify(elonlar));
+        alert("E’lon muvaffaqiyatli qo‘shildi!");
+
+        // Inputlarni tozalash
+        document.getElementById("name").value = '';
+        document.getElementById("price").value = '';
+        document.getElementById("desc").value = '';
+        document.getElementById("imgFile").value = '';
+
+        showPage('list');
+    }
+    reader.readAsDataURL(imgFile);
+}
+
+function renderElonlar() {
+    let box = document.getElementById('elonlar');
+    box.innerHTML = '';
+    if (elonlar.length === 0) {
+        document.getElementById('noElon').style.display = 'block';
+        return;
+    }
+    document.getElementById('noElon').style.display = 'none';
+
+    elonlar.forEach(elon => {
+        let card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <img src="${elon.img}" alt="Rasm">
+            <h3>${elon.type} – ${elon.name}</h3>
+            <p><strong>Narxi:</strong> ${elon.price}</p>
+            <p>${elon.desc}</p>
+        `;
+        box.appendChild(card);
+    });
+}
+
+// Dastlab list sahifasini yashirish
+showPage('list');
+</script>
+
+</body>
+</html>
